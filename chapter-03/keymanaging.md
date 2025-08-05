@@ -33,19 +33,19 @@ EXISTS key1 key2
 
 ---
 
-### `KEYS pattern` ⚠️ 실무 비추천
+### `KEYS pattern` ⚠️ 실무 사용시 위험
 
 * O(N)으로 전체 키 순회 → 단일 스레드 연산인 Redis 성능에 치명적인 병목
 
 ```shell
-KEYS user:*         # 전체 키 중 prefix가 user:인 키 반환
+KEYS user:*    # 전체 키 중 prefix가 user:인 키 반환
 ```
 
 ### [심화] – 왜 O(N)이나 걸릴까?
 
 * Redis는 **Hash Table**로 키를 관리하지만, `KEYS`는 모든 슬롯을 순회하며 패턴을 직접 매칭한다.
 * 내부적으로는 `dictScan()` 호출하여 모든 해시 슬롯을 순회하기 때문에 키 수가 많을수록 심각한 STW 지연이 일어난다.
-* 대안으로 `SCAN`을 사용하는 것이 있다.
+* 대안으로 `SCAN`을 사용할 수 있다.
 
 
 ---
@@ -61,7 +61,7 @@ SCAN 0 MATCH user:* COUNT 100
 
 - 주의사항
     - 반복 조회할 때는 클라이언트가 커서 저장하고 loop 처리 필요
-    - 중복 키가 반환될 수 있음 → `Set`에 수집하거나 dedup 처리 필요
+    - 중복 키가 반환될 수 있음 → `Set`에 수집하거나 중복 제거 처리 필요
      - `MATCH`, `TYPE` 조건 추가 시 속도 저하에 유의해야함
 
 ---
@@ -75,7 +75,7 @@ SORT user_ids BY user:*->score DESC LIMIT 0 10
 ```
 
 - 주의사항
-    - 인메모리 정렬이므로 대상이 크면 메모리 폭증 가능
+    - 인메모리 정렬이므로 대상이 크면 메모리 폭증, 속도 위험
     - `BY`, `GET`으로 외부 키를 조회하면 I/O 비용 급증
 
 ---
@@ -123,7 +123,7 @@ OBJECT IDLETIME key
 ### `DEL key`
 
 * 동기 방식으로 키를 삭제한다.
-* 데이터가 많으면 성능 급하락하므로 주의
+* 데이터가 많으면 성능 문제 생기므로 주의
 
 ```shell
 DEL biglist

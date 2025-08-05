@@ -63,11 +63,26 @@ BRPOP myqueue 0        # 무한 대기 가능 (비동기 이벤트 처리에 활
     - 이벤트 큐 → 생산자 서버가 `RPUSH`, 소비자 서버가 `BLPOP`으로 처리하면서 작업을 조절한다.
 
 
+여기서 블로킹 큐라는 말에 블로킹 큐 관련 연산이 Redis 메인 스레드를 블로킹하는거 아닌가? 하는 의문이 생길 수 있다.
+
+
+그러나 이는 서버 입장에서 블로킹이 아니고, 클라이언트가 블로킹(대기 상태)되는 것으로 이해하면 된다.
+
+> 관련 공식 문서 참고
+>
+> [(1) 레디스 모듈과 블로킹 커맨드](https://redis.io/docs/latest/develop/reference/modules/modules-blocking-ops/)
+> [(2) BLPOP 커맨드](https://redis.io/docs/latest/commands/blpop/)
+> 
+> 더 자세한 내용은 다른 챕터에서 공부할 예정
+
+
 ### [추가] 시간 복잡도
 
 * `LPUSH`, `RPUSH`, `LPOP` → O(1)
 * `LSET`, `LINSERT`, `LRANGE` → O(N)
-* 내부 구조는 Redis 3.2 이후 기본적으로 `quicklist`를 사용 중이다. 이는 기존의 `ziplist + linked list` 혼합 구조이다.
+* 내부 구조는 Redis 3.2 이후 기본적으로 `quicklist`를 사용 중이다. 이는 기존의 `ziplist + linked list` 를 혼합한 구조였으나 7.x 버전 이후로 `listpack` 사용으로 바뀌었다. (과거 버전 설명 주의)
+* [참고 자료 - redis github 내부 list 코드](https://github.com/redis/redis/blob/unstable/src/quicklist.h)
+
 
 ---
 
@@ -98,8 +113,8 @@ HEXISTS user:123 email
 
 ### 개념
 
-* **중복 없는 원소 집합**, 순서 없음 (그래서 꺼내는 연산하면 `SPOP` 무작위 원소가 꺼내짐)
-* 태그, 친구 목록, 유저 ID 집합 등 활용 가능 (특히 집합 연산이 효율적인 곳에 활용하기!!)
+* 중복 없는 원소 집합, 순서 없음 (그래서 꺼내는 연산하면 `SPOP` 무작위 원소가 꺼내짐)
+* 태그, 친구 목록, 유저 ID 집합 등 활용 가능 (특히 집합 연산이 효율적인 곳에 활용하면 좋다)
 
 ### 주요 커맨드
 
@@ -141,7 +156,9 @@ ZREM rank "user1"
 
 * ZADD, ZREM, ZRANGE → **O(logN)**
 * 이유: **SkipList**를 사용하여 정렬된 상태 유지
+* [SkipList에 대한 추가 자료](https://github.com/Pearl-K/spring-redis-study/blob/main/week5_Redis_Data_Type/Redis_SortedSet.md)
 * 인덱스 기반 접근 가능 `O(logN)`, score 범위 검색 가능
+
 
 
 - 실무 예시
@@ -178,8 +195,7 @@ BITFIELD active_users GET u8 100
 
 ### 개념
 
-* **중복을 허용한 채로 고유한 원소 개수(근사값)를 계산하는 구조**
-* 정확도는 약 ±0.81%, 메모리는 약 12KB 고정
+* 중복을 허용한 채로 고유한 원소 개수(근사값)를 계산하는 구조
 * 내부적으로 해시 함수 + bucket을 이용해 cardinality 를 근사적으로 추정함 (정확한 값 아님)
 
 ### 주요 커맨드
@@ -190,7 +206,7 @@ PFCOUNT unique_visitors
 PFMERGE all_visitors v1 v2 v3
 ```
 
-- PF는 **Probabilistic Filter**의 약자이다.
+- PF는 Probabilistic Filter의 약자이다.
 - 실무 예시
     - 실시간 방문자 수 추정 (UV, DAU)
     - 대규모 유입에서 정확도보다 추정치만 알아도 되는 경우
@@ -202,7 +218,7 @@ PFMERGE all_visitors v1 v2 v3
 
 ### 개념
 
-* Redis에서 위도/경도 좌표를 저장하고, **반경 검색**, **거리 계산**, **정렬** 등의 기능을 제공
+* Redis에서 위도/경도 좌표를 저장하고, 반경 검색, 거리 계산, 정렬 등의 기능을 제공
 * 내부적으로는 `Sorted Set`을 활용하여 구현 (score를 GeoHash로 변환해 저장)
 
 ### 주요 커맨드
@@ -235,9 +251,9 @@ GEORADIUSBYMEMBER places "Seoul" 5 km
 
 ### 개념
 
-* Redis 5.0부터 도입된 **로그 기반 append-only 자료구조**
-* Kafka처럼 **생산자-소비자 모델**, **메시지 ID 기반 읽기**, **컨슈머 그룹** 등 지원
-* **비동기 이벤트 처리**, **로그 수집**, **알림 시스템**에 유용
+* Redis 5.0부터 도입된 로그 기반 append-only 자료구조
+* Kafka처럼 생산자-소비자 모델, 메시지 ID 기반 읽기, 컨슈머 그룹 등 지원
+* 비동기 이벤트 처리, 로그 수집, 알림 시스템에 유용
 
 ### 주요 커맨드
 
@@ -258,6 +274,7 @@ XACK mystream mygroup 123456789-0
 * 내부적으로는 `Radix Tree` 기반 구조
 * 하나의 stream entry는 `ID + key-value pairs`로 구성
 * `XGROUP`, `XREADGROUP`을 사용해 컨슈머 그룹 모델 구현 가능 (Kafka 유사)
+* 더 구체적인 내용은 추후 Stream 챕터에서 다룰 예정
 
 
 - 실무 예시
